@@ -39,7 +39,11 @@ Node(std::unique_ptr<NodeDataModel> && dataModel)
 
 
 Node::
-~Node() {}
+~Node()
+{
+  std::cout << "Node destructor" << std::endl;
+}
+
 
 QJsonObject
 Node::
@@ -205,4 +209,20 @@ onDataUpdated(PortIndex index)
 
   for (auto const & c : connections)
     c.second->propagateData(nodeData);
+}
+
+void
+Node::
+onDataUpdatedConnection(PortIndex index, QtNodes::Connection* connection)
+{
+	auto nodeData = _nodeDataModel->outData(index);
+
+//  auto connections =
+//    _nodeState.connections(PortType::Out, index);
+
+//  for (auto const & c : connections)
+//    c.second->propagateData(nodeData);
+
+    connection->propagateData(nodeData);
+
 }

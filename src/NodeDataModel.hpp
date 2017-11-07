@@ -84,7 +84,7 @@ public:
 
   virtual
   ConnectionPolicy
-  portOutConnectionPolicy(PortIndex) const
+  portConnectionPolicy(PortType, PortIndex) const
   {
     return ConnectionPolicy::Many;
   }

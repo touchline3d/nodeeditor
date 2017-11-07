@@ -65,3 +65,8 @@ target_link_libraries(nodes
 if(BUILD_EXAMPLES)
   add_subdirectory(examples)
 endif()
+
+install(TARGETS nodes DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+install(DIRECTORY include DESTINATION ${CMAKE_INSTALL_PREFIX})
+install(DIRECTORY src/ DESTINATION ${CMAKE_INSTALL_PREFIX}/src
+        FILES_MATCHING PATTERN "*.hpp")

@@ -114,6 +114,8 @@ signals:
 
   void nodeContextMenu(Node& n, const QPointF& pos);
 
+  void nodeClicked(Node& n);
+
 private:
 
   using SharedConnection = std::shared_ptr<Connection>;

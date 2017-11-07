@@ -233,10 +233,9 @@ mousePressEvent(QGraphicsSceneMouseEvent * event)
         }
         else // initialize new Connection
         {
-          const auto outPolicy = _node.nodeDataModel()->portOutConnectionPolicy(portIndex);
+          const auto connectionPolicy = _node.nodeDataModel()->portConnectionPolicy(portToCheck, portIndex);
           if (!connections.empty() &&
-              portToCheck == PortType::Out &&
-              outPolicy == NodeDataModel::ConnectionPolicy::One)
+			  connectionPolicy == NodeDataModel::ConnectionPolicy::One)
           {
             _scene.deleteConnection( *connections.begin()->second );
           }
@@ -331,6 +330,9 @@ mouseReleaseEvent(QGraphicsSceneMouseEvent* event)
   state.setResizing(false);
 
   QGraphicsObject::mouseReleaseEvent(event);
+
+  _scene.nodeClicked(node());
+
 
   // position connections precisely after fast node move
   moveConnections();
