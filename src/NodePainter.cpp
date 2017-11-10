@@ -254,14 +254,18 @@ drawModelName(QPainter * painter,
   if (!model->captionVisible())
     return;
 
-  QString const &name = model->caption();
-
+    float captionMaxWidth = model->resizable() ? qMax(nodeStyle.CaptionMaxWidth, (float)geom.width()) : nodeStyle.CaptionMaxWidth;
+    
   QFont f = painter->font();
 
   f.setBold(true);
 
   QFontMetrics metrics(f);
 
+    QString const &name = captionMaxWidth > 0.0f ? metrics.elidedText(model->caption(), Qt::ElideRight, captionMaxWidth)
+    : model->caption();
+    
+    
   auto rect = metrics.boundingRect(name);
 
   QPointF position((geom.width() - rect.width()) / 2.0,

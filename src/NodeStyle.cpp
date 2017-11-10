@@ -46,6 +46,17 @@ setNodeStyle(QString jsonText)
 }
 
 
+void
+NodeStyle::
+setNodeStyleCaptionMaxWidth(float max){
+    auto style = StyleCollection::nodeStyle();
+    
+    style.CaptionMaxWidth = max;
+    
+    StyleCollection::setNodeStyle(style);
+}
+
+
 #ifdef STYLE_DEBUG
   #define NODE_STYLE_CHECK_UNDEFINED_VALUE(v, variable) { \
       if (v.type() == QJsonValue::Undefined || \
@@ -133,4 +144,7 @@ loadJsonFromByteArray(QByteArray const &byteArray)
   NODE_STYLE_READ_FLOAT(obj, ConnectionPointDiameter);
 
   NODE_STYLE_READ_FLOAT(obj, Opacity);
+    
+    NODE_STYLE_READ_FLOAT(obj, CaptionMaxWidth);
+
 }

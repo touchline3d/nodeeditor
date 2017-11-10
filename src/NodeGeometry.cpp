@@ -264,7 +264,9 @@ captionWidth() const
   if (!_dataModel->captionVisible())
     return 0;
 
-  QString name = _dataModel->caption();
+    float maxCaptionWidth = _dataModel->nodeStyle().CaptionMaxWidth;
+    
+    QString name = maxCaptionWidth > 0.0 ? _boldFontMetrics.elidedText(_dataModel->caption(), Qt::ElideRight, maxCaptionWidth) : _dataModel->caption();
 
   return _boldFontMetrics.boundingRect(name).width();
 }
