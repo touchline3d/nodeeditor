@@ -55,7 +55,7 @@ public:
   outData(PortIndex port) override;
 
   void
-  setInData(std::shared_ptr<NodeData> data, int) override
+  setInData(std::shared_ptr<NodeData> data, int, bool) override
   {
     auto textData = std::dynamic_pointer_cast<TextData>(data);
 

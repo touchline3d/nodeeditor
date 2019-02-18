@@ -101,7 +101,7 @@ public:
   virtual
   void
   setInData(std::shared_ptr<NodeData> nodeData,
-            PortIndex port) = 0;
+            PortIndex port, bool connectionCut = false) = 0;
 
   virtual
   std::shared_ptr<NodeData>

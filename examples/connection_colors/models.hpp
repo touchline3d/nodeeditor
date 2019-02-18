@@ -134,7 +134,7 @@ public:
   }
 
   void
-  setInData(std::shared_ptr<NodeData>, int) override
+  setInData(std::shared_ptr<NodeData>, int, bool) override
   {
     //
   }

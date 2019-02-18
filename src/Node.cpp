@@ -186,9 +186,9 @@ nodeDataModel() const
 void
 Node::
 propagateData(std::shared_ptr<NodeData> nodeData,
-              PortIndex inPortIndex) const
+              PortIndex inPortIndex, bool connectionCut) const
 {
-  _nodeDataModel->setInData(nodeData, inPortIndex);
+  _nodeDataModel->setInData(nodeData, inPortIndex, connectionCut);
 
   //Recalculate the nodes visuals. A data change can result in the node taking more space than before, so this forces a recalculate+repaint on the affected node
   _nodeGraphicsObject->setGeometryChanged();
@@ -213,7 +213,7 @@ onDataUpdated(PortIndex index)
 
 void
 Node::
-onDataUpdatedConnection(PortIndex index, QtNodes::Connection* connection)
+onDataUpdatedConnection(PortIndex index, QtNodes::Connection* connection, bool connectionCut)
 {
 	auto nodeData = _nodeDataModel->outData(index);
 
@@ -223,6 +223,6 @@ onDataUpdatedConnection(PortIndex index, QtNodes::Connection* connection)
 //  for (auto const & c : connections)
 //    c.second->propagateData(nodeData);
 
-    connection->propagateData(nodeData);
+    connection->propagateData(nodeData, connectionCut);
 
 }

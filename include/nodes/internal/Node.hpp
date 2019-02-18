@@ -90,7 +90,7 @@ public slots: // data propagation
   /// Propagates incoming data to the underlying model.
   void
   propagateData(std::shared_ptr<NodeData> nodeData,
-                PortIndex inPortIndex) const;
+                PortIndex inPortIndex, bool connectionCut = false) const;
 
   /// Fetches data from model's OUT #index port
   /// and propagates it to the connection
@@ -98,7 +98,7 @@ public slots: // data propagation
   onDataUpdated(PortIndex index);
 
   void
-	  onDataUpdatedConnection(PortIndex index, Connection* connection);
+	  onDataUpdatedConnection(PortIndex index, Connection* connection, bool connectionCut = false);
 
 
 private:

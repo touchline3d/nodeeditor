@@ -63,7 +63,7 @@ Connection(Node& nodeIn,
 Connection::
 ~Connection()
 {
-  propagateEmptyData();
+  propagateCutData();
 
   if (_inNode)
   {
@@ -359,20 +359,29 @@ dataType() const
 
 void
 Connection::
-propagateData(std::shared_ptr<NodeData> nodeData) const
+propagateData(std::shared_ptr<NodeData> nodeData, bool connectionCut) const
 {
   if (_inNode)
   {
-    _inNode->propagateData(nodeData, _inPortIndex);
+    _inNode->propagateData(nodeData, _inPortIndex, connectionCut);
   }
 }
 
 
 void
 Connection::
-propagateEmptyData() const
+propagateCutData()
 {
-  std::shared_ptr<NodeData> emptyData;
+	if (_outNode)
+	{
+		//    _outNode->onDataUpdated(outPortIndex);
 
-  propagateData(emptyData);
+		_outNode->onDataUpdatedConnection(_outPortIndex, this, true);
+	}
+	else
+	{
+		std::shared_ptr<NodeData> emptyData;
+
+		propagateData(emptyData);
+	}
 }

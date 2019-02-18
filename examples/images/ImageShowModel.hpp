@@ -57,7 +57,7 @@ public:
   outData(PortIndex port) override;
 
   void
-  setInData(std::shared_ptr<NodeData> nodeData, PortIndex port) override;
+  setInData(std::shared_ptr<NodeData> nodeData, PortIndex port, bool) override;
 
   QWidget *
   embeddedWidget() override { return _label; }

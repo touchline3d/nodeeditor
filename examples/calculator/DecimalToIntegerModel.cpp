@@ -61,7 +61,7 @@ outData(PortIndex)
 
 void
 DecimalToIntegerModel::
-setInData(std::shared_ptr<NodeData> data, PortIndex portIndex)
+setInData(std::shared_ptr<NodeData> data, PortIndex portIndex, bool)
 {
   auto numberData =
     std::dynamic_pointer_cast<DecimalData>(data);

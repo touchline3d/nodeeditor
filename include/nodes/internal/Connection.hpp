@@ -116,9 +116,9 @@ public:
 public: // data propagation
 
   void
-  propagateData(std::shared_ptr<NodeData> nodeData) const;
+  propagateData(std::shared_ptr<NodeData> nodeData, bool connectionCut = false) const;
   void
-  propagateEmptyData() const;
+  propagateCutData();
 
 private:
 

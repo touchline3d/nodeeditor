@@ -174,7 +174,7 @@ disconnect(PortType portToDisconnect) const
 	state.getEntries(portToDisconnect)[portIndex].erase(_connection->id());// .clear();
 
   // 4) Propagate invalid data to IN node
-  _connection->propagateEmptyData();
+  _connection->propagateCutData();
 
   // clear Connection side
   _connection->clearNode(portToDisconnect);
