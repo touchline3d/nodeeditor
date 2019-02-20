@@ -47,6 +47,8 @@ protected:
 
   void mousePressEvent(QMouseEvent *event) override;
 
+  void mouseReleaseEvent(QMouseEvent *event) override;
+
   void mouseMoveEvent(QMouseEvent *event) override;
 
   void drawBackground(QPainter* painter, const QRectF& r) override;
@@ -65,5 +67,7 @@ private:
   QPointF _clickPos;
 
   FlowScene* _scene;
+  bool _mousePressed = false;
+  bool _stopRubberBandDrag = false;
 };
 }

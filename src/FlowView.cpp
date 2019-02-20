@@ -261,10 +261,18 @@ FlowView::
 deleteSelectedNodes()
 {
   // delete the nodes, this will delete many of the connections
+	QList<NodeGraphicsObject*> selectedNodes;
   for (QGraphicsItem * item : _scene->selectedItems())
   {
-    if (auto n = qgraphicsitem_cast<NodeGraphicsObject*>(item))
-      _scene->removeNode(n->node());
+	if (auto n = qgraphicsitem_cast<NodeGraphicsObject*>(item))
+	{
+		selectedNodes.append(n);
+	}
+  }
+
+  for (NodeGraphicsObject* node : selectedNodes)
+  {
+	  _scene->removeNode(node->node());
   }
 
   for (QGraphicsItem * item : _scene->selectedItems())
@@ -300,7 +308,14 @@ keyReleaseEvent(QKeyEvent *event)
   switch (event->key())
   {
     case Qt::Key_Shift:
-      setDragMode(QGraphicsView::ScrollHandDrag);
+	  if (!_mousePressed) 
+	  {
+		setDragMode(QGraphicsView::ScrollHandDrag);
+	  }
+	  else
+	  {
+		  _stopRubberBandDrag = true;
+	  }
       break;
 
     default:
@@ -319,6 +334,21 @@ mousePressEvent(QMouseEvent *event)
   {
     _clickPos = mapToScene(event->pos());
   }
+  _mousePressed = true;
+}
+
+
+void
+FlowView::
+mouseReleaseEvent(QMouseEvent *event)
+{
+	QGraphicsView::mouseReleaseEvent(event);
+	_mousePressed = false;
+	if (_stopRubberBandDrag)
+	{
+		setDragMode(QGraphicsView::ScrollHandDrag);
+		_stopRubberBandDrag = false;
+	}
 }
 
 
