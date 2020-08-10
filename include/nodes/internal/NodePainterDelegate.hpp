@@ -22,6 +22,7 @@ public:
   paint(QPainter* painter,
         NodeGeometry const& geom,
         NodeDataModel const * model,
-		NodeGraphicsObject const & graphicsObject) = 0;
+		NodeGraphicsObject const & graphicsObject,
+		FlowScene const& scene) = 0;
 };
 }

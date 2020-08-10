@@ -55,7 +55,7 @@ paint(QPainter* painter,
   /// call custom painter
   if (auto painterDelegate = model->painterDelegate())
   {
-    painterDelegate->paint(painter, geom, model, graphicsObject);
+    painterDelegate->paint(painter, geom, model, graphicsObject, scene);
   }
 }
 

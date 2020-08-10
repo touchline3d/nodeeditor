@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.2)
 
 project(NodeEditor CXX)
 
+set (CMAKE_PREFIX_PATH "C:\\Qt\\5.12.3\\msvc2017_64\\")
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 set(CMAKE_DISABLE_SOURCE_CHANGES  ON)
 
