@@ -65,7 +65,6 @@ NodeGraphicsObject(FlowScene &scene,
   };
   connect(this, &QGraphicsObject::xChanged, this, onMoveSlot);
   connect(this, &QGraphicsObject::yChanged, this, onMoveSlot);
-
 }
 
 
@@ -91,6 +90,7 @@ node() const
   return _node;
 }
 
+
 void
 NodeGraphicsObject::
 embedQWidget()
@@ -106,6 +106,12 @@ embedQWidget()
     _proxyWidget->setPreferredWidth(5);
 
     geom.recalculateSize();
+
+    if (w->sizePolicy().verticalPolicy() & QSizePolicy::ExpandFlag)
+    {
+      // If the widget wants to use as much vertical space as possible, set it to have the geom's equivalentWidgetHeight.
+      _proxyWidget->setMinimumHeight(geom.equivalentWidgetHeight());
+    }
 
     _proxyWidget->setPos(geom.widgetPosition());
 
@@ -137,30 +143,28 @@ void
 NodeGraphicsObject::
 moveConnections() const
 {
-
   NodeState const & nodeState = _node.nodeState();
 
-  auto moveConnections =
-    [&](PortType portType)
+  for (PortType portType: {PortType::In, PortType::Out})
+  {
+    auto const & connectionEntries =
+      nodeState.getEntries(portType);
+
+    for (auto const & connections : connectionEntries)
     {
-      auto const & connectionEntries =
-        nodeState.getEntries(portType);
-
-      for (auto const & connections : connectionEntries)
-      {
-        for (auto & con : connections)
-          con.second->getConnectionGraphicsObject().move();
-      }
-    };
-
-  moveConnections(PortType::In);
-
-  moveConnections(PortType::Out);
+      for (auto & con : connections)
+        con.second->getConnectionGraphicsObject().move();
+    }
+  }
 }
 
-void NodeGraphicsObject::lock(bool locked)
+
+void
+NodeGraphicsObject::
+lock(bool locked)
 {
   _locked = locked;
+
   setFlag(QGraphicsItem::ItemIsMovable, !locked);
   setFlag(QGraphicsItem::ItemIsFocusable, !locked);
   setFlag(QGraphicsItem::ItemIsSelectable, !locked);
@@ -196,7 +200,8 @@ void
 NodeGraphicsObject::
 mousePressEvent(QGraphicsSceneMouseEvent * event)
 {
-  if(_locked) return;
+  if (_locked)
+    return;
 
   // deselect all other items after this one is selected
   if (!isSelected() &&
@@ -205,57 +210,56 @@ mousePressEvent(QGraphicsSceneMouseEvent * event)
     _scene.clearSelection();
   }
 
-  auto clickPort =
-    [&](PortType portToCheck)
+  for (PortType portToCheck: {PortType::In, PortType::Out})
+  {
+    NodeGeometry const & nodeGeometry = _node.nodeGeometry();
+
+    // TODO do not pass sceneTransform
+    int const portIndex = nodeGeometry.checkHitScenePoint(portToCheck,
+                                                    event->scenePos(),
+                                                    sceneTransform());
+
+    if (portIndex != INVALID)
     {
-      NodeGeometry & nodeGeometry = _node.nodeGeometry();
+      NodeState const & nodeState = _node.nodeState();
 
-      // TODO do not pass sceneTransform
-      int portIndex = nodeGeometry.checkHitScenePoint(portToCheck,
-                                                      event->scenePos(),
-                                                      sceneTransform());
+      std::unordered_map<QUuid, Connection*> connections =
+        nodeState.connections(portToCheck, portIndex);
 
-      if (portIndex != INVALID)
+      // start dragging existing connection
+      if (!connections.empty() && portToCheck == PortType::In)
       {
-        NodeState const & nodeState = _node.nodeState();
+        auto con = connections.begin()->second;
 
-        std::unordered_map<QUuid, Connection*> connections =
-          nodeState.connections(portToCheck, portIndex);
+        NodeConnectionInteraction interaction(_node, *con, _scene);
 
-        // start dragging existing connection
-        if (!connections.empty() && portToCheck == PortType::In)
-        {
-          auto con = connections.begin()->second;
-
-          NodeConnectionInteraction interaction(_node, *con, _scene);
-
-          interaction.disconnect(portToCheck);
-        }
-        else // initialize new Connection
+        interaction.disconnect(portToCheck);
+      }
+      else // initialize new Connection
+      {
+        if (portToCheck == PortType::Out)
         {
           const auto connectionPolicy = _node.nodeDataModel()->portConnectionPolicy(portToCheck, portIndex);
           if (!connections.empty() &&
-			  connectionPolicy == NodeDataModel::ConnectionPolicy::One)
+             connectionPolicy == NodeDataModel::ConnectionPolicy::One)
           {
             _scene.deleteConnection( *connections.begin()->second );
           }
-
-          // todo add to FlowScene
-          auto connection = _scene.createConnection(portToCheck,
-                                                    _node,
-                                                    portIndex);
-
-          _node.nodeState().setConnection(portToCheck,
-                                          portIndex,
-                                          *connection);
-
-          connection->getConnectionGraphicsObject().grabMouse();
         }
-      }
-    };
 
-  clickPort(PortType::In);
-  clickPort(PortType::Out);
+        // todo add to FlowScene
+        auto connection = _scene.createConnection(portToCheck,
+                                                  _node,
+                                                  portIndex);
+
+        _node.nodeState().setConnection(portToCheck,
+                                        portIndex,
+                                        *connection);
+
+        connection->getConnectionGraphicsObject().grabMouse();
+      }
+    }
+  }
 
   auto pos     = event->pos();
   auto & geom  = _node.nodeGeometry();
@@ -353,6 +357,7 @@ hoverEnterEvent(QGraphicsSceneHoverEvent * event)
       item->setZValue(0.0);
     }
   }
+
   // bring this node forward
   setZValue(1.0);
 
@@ -381,7 +386,6 @@ hoverMoveEvent(QGraphicsSceneHoverEvent * event)
   auto pos    = event->pos();
   auto & geom = _node.nodeGeometry();
 
-
   if (_node.nodeDataModel()->resizable() &&
       geom.resizeRect().contains(QPoint(pos.x(), pos.y())))
   {
@@ -404,6 +408,7 @@ mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event)
 
   _scene.nodeDoubleClicked(node());
 }
+
 
 void
 NodeGraphicsObject::

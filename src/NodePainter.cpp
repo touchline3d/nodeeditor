@@ -118,76 +118,70 @@ drawConnectionPoints(QPainter* painter,
   float diameter = nodeStyle.ConnectionPointDiameter;
   auto  reducedDiameter = diameter * 0.6;
 
-  auto drawPoints =
-    [&](PortType portType)
-    {
-      size_t n = state.getEntries(portType).size();
+  for(PortType portType: {PortType::Out, PortType::In})
+  {
+    size_t n = state.getEntries(portType).size();
 
-      for (size_t i = 0; i < n; ++i)
+    for (unsigned int i = 0; i < n; ++i)
+    {
+      QPointF p = geom.portScenePosition(i, portType);
+
+      auto const & dataType = model->dataType(portType, i);
+
+      bool canConnect = (state.getEntries(portType)[i].empty() ||
+                         (model->portOutConnectionPolicy(portType, i) == NodeDataModel::ConnectionPolicy::Many) );
+
+      double r = 1.0;
+      if (state.isReacting() &&
+          canConnect &&
+          portType == state.reactingPortType())
       {
 
-        QPointF p = geom.portScenePosition(i, portType);
+        auto   diff = geom.draggingPos() - p;
+        double dist = std::sqrt(QPointF::dotProduct(diff, diff));
+        bool   typeConvertable = false;
 
-        auto const & dataType = model->dataType(portType, i);
-
-        bool canConnect = (state.getEntries(portType)[i].empty() ||
-                           (
-                            model->portConnectionPolicy(portType, i) == NodeDataModel::ConnectionPolicy::Many) );
-
-        double r = 1.0;
-        if (state.isReacting() &&
-            canConnect &&
-            portType == state.reactingPortType())
         {
-
-          auto   diff = geom.draggingPos() - p;
-          double dist = std::sqrt(QPointF::dotProduct(diff, diff));
-          bool   typeConvertable = false;
-
+          if (portType == PortType::In)
           {
-            if (portType == PortType::In)
-            {
-              typeConvertable = scene.registry().getTypeConverter(state.reactingDataType().id, dataType.id) != nullptr;
-            }
-            else
-            {
-              typeConvertable = scene.registry().getTypeConverter(dataType.id, state.reactingDataType().id) != nullptr;
-            }
-          }
-
-          if (state.reactingDataType().id == dataType.id || typeConvertable)
-          {
-            double const thres = 40.0;
-            r = (dist < thres) ?
-                (2.0 - dist / thres ) :
-                1.0;
+            typeConvertable = scene.registry().getTypeConverter(state.reactingDataType(), dataType) != nullptr;
           }
           else
           {
-            double const thres = 80.0;
-            r = (dist < thres) ?
-                (dist / thres) :
-                1.0;
+            typeConvertable = scene.registry().getTypeConverter(dataType, state.reactingDataType()) != nullptr;
           }
         }
 
-        if (connectionStyle.useDataDefinedColors())
+        if (state.reactingDataType().id == dataType.id || typeConvertable)
         {
-          painter->setBrush(connectionStyle.normalColor(dataType.id));
+          double const thres = 40.0;
+          r = (dist < thres) ?
+                (2.0 - dist / thres ) :
+                1.0;
         }
         else
         {
-          painter->setBrush(nodeStyle.ConnectionPointColor);
+          double const thres = 80.0;
+          r = (dist < thres) ?
+                (dist / thres) :
+                1.0;
         }
-
-        painter->drawEllipse(p,
-                             reducedDiameter * r,
-                             reducedDiameter * r);
       }
-    };
 
-  drawPoints(PortType::Out);
-  drawPoints(PortType::In);
+      if (connectionStyle.useDataDefinedColors())
+      {
+        painter->setBrush(connectionStyle.normalColor(dataType.id));
+      }
+      else
+      {
+        painter->setBrush(nodeStyle.ConnectionPointColor);
+      }
+
+      painter->drawEllipse(p,
+                           reducedDiameter * r,
+                           reducedDiameter * r);
+    }
+  };
 }
 
 
@@ -203,40 +197,36 @@ drawFilledConnectionPoints(QPainter * painter,
 
   auto diameter = nodeStyle.ConnectionPointDiameter;
 
-  auto drawPoints =
-    [&](PortType portType)
+  for(PortType portType: {PortType::Out, PortType::In})
+  {
+    size_t n = state.getEntries(portType).size();
+
+    for (size_t i = 0; i < n; ++i)
     {
-      size_t n = state.getEntries(portType).size();
+      QPointF p = geom.portScenePosition(i, portType);
 
-      for (size_t i = 0; i < n; ++i)
+      if (!state.getEntries(portType)[i].empty())
       {
-        QPointF p = geom.portScenePosition(i, portType);
+        auto const & dataType = model->dataType(portType, i);
 
-        if (!state.getEntries(portType)[i].empty())
+        if (connectionStyle.useDataDefinedColors())
         {
-          auto const & dataType = model->dataType(portType, i);
-
-          if (connectionStyle.useDataDefinedColors())
-          {
-            QColor const c = connectionStyle.normalColor(dataType.id);
-            painter->setPen(c);
-            painter->setBrush(c);
-          }
-          else
-          {
-            painter->setPen(nodeStyle.FilledConnectionPointColor);
-            painter->setBrush(nodeStyle.FilledConnectionPointColor);
-          }
-
-          painter->drawEllipse(p,
-                               diameter * 0.4,
-                               diameter * 0.4);
+          QColor const c = connectionStyle.normalColor(dataType.id);
+          painter->setPen(c);
+          painter->setBrush(c);
         }
-      }
-    };
+        else
+        {
+          painter->setPen(nodeStyle.FilledConnectionPointColor);
+          painter->setBrush(nodeStyle.FilledConnectionPointColor);
+        }
 
-  drawPoints(PortType::Out);
-  drawPoints(PortType::In);
+        painter->drawEllipse(p,
+                             diameter * 0.4,
+                             diameter * 0.4);
+      }
+    }
+  }
 }
 
 
@@ -254,18 +244,16 @@ drawModelName(QPainter * painter,
   if (!model->captionVisible())
     return;
 
-    float captionMaxWidth = model->resizable() ? qMax(nodeStyle.CaptionMaxWidth, (float)geom.width()) : nodeStyle.CaptionMaxWidth;
-    
+  float captionMaxWidth = model->resizable() ? qMax(nodeStyle.CaptionMaxWidth, (float)geom.width()) : nodeStyle.CaptionMaxWidth;
+
   QFont f = painter->font();
 
   f.setBold(true);
 
   QFontMetrics metrics(f);
 
-    QString const &name = captionMaxWidth > 0.0f ? metrics.elidedText(model->caption(), Qt::ElideRight, captionMaxWidth)
-    : model->caption();
-    
-    
+  QString const &name = captionMaxWidth > 0.0f ? metrics.elidedText(model->caption(), Qt::ElidRight, captionMaxWidth) : model->caption();
+
   auto rect = metrics.boundingRect(name);
 
   QPointF position((geom.width() - rect.width()) / 2.0,
@@ -290,60 +278,55 @@ drawEntryLabels(QPainter * painter,
   QFontMetrics const & metrics =
     painter->fontMetrics();
 
-  auto drawPoints =
-    [&](PortType portType)
+  for(PortType portType: {PortType::Out, PortType::In})
+  {
+    auto const &nodeStyle = model->nodeStyle();
+
+    auto& entries = state.getEntries(portType);
+
+    size_t n = entries.size();
+
+    for (size_t i = 0; i < n; ++i)
     {
-      auto const &nodeStyle = model->nodeStyle();
+      QPointF p = geom.portScenePosition(i, portType);
 
-      auto& entries = state.getEntries(portType);
+      if (entries[i].empty())
+        painter->setPen(nodeStyle.FontColorFaded);
+      else
+        painter->setPen(nodeStyle.FontColor);
 
-      size_t n = entries.size();
+      QString s;
 
-      for (size_t i = 0; i < n; ++i)
+      if (model->portCaptionVisible(portType, i))
       {
-        QPointF p = geom.portScenePosition(i, portType);
-
-        if (entries[i].empty())
-          painter->setPen(nodeStyle.FontColorFaded);
-        else
-          painter->setPen(nodeStyle.FontColor);
-
-        QString s;
-
-        if (model->portCaptionVisible(portType, i))
-        {
-          s = model->portCaption(portType, i);
-        }
-        else
-        {
-          s = model->dataType(portType, i).name;
-        }
-
-        auto rect = metrics.boundingRect(s);
-
-        p.setY(p.y() + rect.height() / 4.0);
-
-        switch (portType)
-        {
-          case PortType::In:
-            p.setX(5.0);
-            break;
-
-          case PortType::Out:
-            p.setX(geom.width() - 5.0 - rect.width());
-            break;
-
-          default:
-            break;
-        }
-
-        painter->drawText(p, s);
+        s = model->portCaption(portType, i);
       }
-    };
+      else
+      {
+        s = model->dataType(portType, i).name;
+      }
 
-  drawPoints(PortType::Out);
+      auto rect = metrics.boundingRect(s);
 
-  drawPoints(PortType::In);
+      p.setY(p.y() + rect.height() / 4.0);
+
+      switch (portType)
+      {
+      case PortType::In:
+        p.setX(5.0);
+        break;
+
+      case PortType::Out:
+        p.setX(geom.width() - 5.0 - rect.width());
+        break;
+
+      default:
+        break;
+      }
+
+      painter->drawText(p, s);
+    }
+  }
 }
 
 

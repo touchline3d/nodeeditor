@@ -1,10 +1,8 @@
 #pragma once
 
-#include <memory>
-
 #include <QtCore/QObject>
 #include <QtCore/QUuid>
-#include <QVariant>
+#include <QtCore/QVariant>
 
 #include "PortType.hpp"
 #include "NodeData.hpp"
@@ -12,8 +10,10 @@
 #include "Serializable.hpp"
 #include "ConnectionState.hpp"
 #include "ConnectionGeometry.hpp"
+#include "TypeConverter.hpp"
 #include "QUuidStdHash.hpp"
 #include "Export.hpp"
+#include "memory.hpp"
 
 class QPointF;
 
@@ -44,7 +44,9 @@ public:
   Connection(Node& nodeIn,
              PortIndex portIndexIn,
              Node& nodeOut,
-             PortIndex portIndexOut);
+             PortIndex portIndexOut,
+             TypeConverter converter =
+               TypeConverter{});
 
   Connection(const Connection&) = delete;
   Connection operator=(const Connection&) = delete;
@@ -111,18 +113,33 @@ public:
   clearNode(PortType portType);
 
   NodeDataType
-  dataType() const;
+  dataType(PortType portType) const;
+
+  void
+  setTypeConverter(TypeConverter converter);
+
+  bool
+  complete() const;
 
 public: // data propagation
 
   void
   propagateData(std::shared_ptr<NodeData> nodeData, bool connectionCut = false) const;
+
   void
-  propagateCutData();
+  propagateEmptyData();
+
+Q_SIGNALS:
+
+  void
+  connectionCompleted(Connection const&) const;
+
+  void
+  connectionMadeIncomplete(Connection const&) const;
 
 private:
 
-  QUuid _id;
+  QUuid _uid;
 
 private:
 
@@ -137,9 +154,12 @@ private:
   ConnectionState    _connectionState;
   ConnectionGeometry _connectionGeometry;
 
-  std::unique_ptr<ConnectionGraphicsObject> _connectionGraphicsObject;
+  std::unique_ptr<ConnectionGraphicsObject>_connectionGraphicsObject;
 
-signals:
+  TypeConverter _converter;
+
+Q_SIGNALS:
+
   void
   updated(Connection& conn) const;
 };

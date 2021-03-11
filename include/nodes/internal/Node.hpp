@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory>
 
 #include <QtCore/QObject>
 #include <QtCore/QUuid>
@@ -16,6 +15,7 @@
 #include "NodeGraphicsObject.hpp"
 #include "ConnectionGraphicsObject.hpp"
 #include "Serializable.hpp"
+#include "memory.hpp"
 
 namespace QtNodes
 {
@@ -53,7 +53,7 @@ public:
   id() const;
 
   void reactToPossibleConnection(PortType,
-                                 NodeDataType,
+                                 NodeDataType const &,
                                  QPointF const & scenePoint);
 
   void
@@ -85,7 +85,7 @@ public:
   NodeDataModel*
   nodeDataModel() const;
 
-public slots: // data propagation
+public Q_SLOTS: // data propagation
 
   /// Propagates incoming data to the underlying model.
   void
@@ -95,17 +95,17 @@ public slots: // data propagation
   /// Fetches data from model's OUT #index port
   /// and propagates it to the connection
   void
-  onDataUpdated(PortIndex index);
+  onDataUpdated(PortIndex index, bool connectionCut = false);
 
+  /// update the graphic part if the size of the embeddedwidget changes
   void
-	  onDataUpdatedConnection(PortIndex index, Connection* connection, bool connectionCut = false);
-
+  onNodeSizeUpdated();
 
 private:
 
   // addressing
 
-  QUuid _id;
+  QUuid _uid;
 
   // data
 

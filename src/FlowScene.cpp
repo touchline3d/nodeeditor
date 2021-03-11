@@ -1,7 +1,7 @@
 #include "FlowScene.hpp"
 
-#include <iostream>
 #include <stdexcept>
+#include <utility>
 
 #include <QtWidgets/QGraphicsSceneMoveEvent>
 #include <QtWidgets/QFileDialog>
@@ -13,8 +13,8 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonArray>
-
-#include <QDebug>
+#include <QtCore/QtGlobal>
+#include <QtCore/QDebug>
 
 #include "Node.hpp"
 #include "NodeGraphicsObject.hpp"
@@ -33,16 +33,30 @@ using QtNodes::NodeGraphicsObject;
 using QtNodes::Connection;
 using QtNodes::DataModelRegistry;
 using QtNodes::NodeDataModel;
-//using QtNodes::Properties;
 using QtNodes::PortType;
 using QtNodes::PortIndex;
+using QtNodes::TypeConverter;
+
 
 FlowScene::
-FlowScene(std::shared_ptr<DataModelRegistry> registry)
-  : _registry(registry)
+FlowScene(std::shared_ptr<DataModelRegistry> registry,
+          QObject * parent)
+  : QGraphicsScene(parent)
+  , _registry(std::move(registry))
 {
   setItemIndexMethod(QGraphicsScene::NoIndex);
+
+  // This connection should come first
+  connect(this, &FlowScene::connectionCreated, this, &FlowScene::setupConnectionSignals);
+  connect(this, &FlowScene::connectionCreated, this, &FlowScene::sendConnectionCreatedToNodes);
+  connect(this, &FlowScene::connectionDeleted, this, &FlowScene::sendConnectionDeletedToNodes);
 }
+
+FlowScene::
+FlowScene(QObject * parent)
+  : FlowScene(std::make_shared<DataModelRegistry>(),
+              parent)
+{}
 
 
 FlowScene::
@@ -62,14 +76,23 @@ createConnection(PortType connectedPort,
 {
   auto connection = std::make_shared<Connection>(connectedPort, node, portIndex);
 
-  auto cgo = std::make_unique<ConnectionGraphicsObject>(*this, *connection);
+  auto cgo = detail::make_unique<ConnectionGraphicsObject>(*this, *connection);
 
   // after this function connection points are set to node port
   connection->setGraphicsObject(std::move(cgo));
 
   _connections[connection->id()] = connection;
 
-  connectionCreated(*connection);
+  // Note: this connection isn't truly created yet. It's only partially created.
+  // Thus, don't send the connectionCreated(...) signal.
+
+  connect(connection.get(),
+          &Connection::connectionCompleted,
+          this,
+          [this](Connection const& c) {
+            connectionCreated(c);
+          });
+
   return connection;
 }
 
@@ -79,16 +102,17 @@ FlowScene::
 createConnection(Node& nodeIn,
                  PortIndex portIndexIn,
                  Node& nodeOut,
-                 PortIndex portIndexOut)
+                 PortIndex portIndexOut,
+                 TypeConverter const &converter)
 {
-
   auto connection =
     std::make_shared<Connection>(nodeIn,
                                  portIndexIn,
                                  nodeOut,
-                                 portIndexOut);
+                                 portIndexOut,
+                                 converter);
 
-  auto cgo = std::make_unique<ConnectionGraphicsObject>(*this, *connection);
+  auto cgo = detail::make_unique<ConnectionGraphicsObject>(*this, *connection);
 
   nodeIn.nodeState().setConnection(PortType::In, portIndexIn, *connection);
   nodeOut.nodeState().setConnection(PortType::Out, portIndexOut, *connection);
@@ -120,7 +144,39 @@ restoreConnection(QJsonObject const &connectionJson)
   auto nodeIn  = _nodes[nodeInId].get();
   auto nodeOut = _nodes[nodeOutId].get();
 
-  return createConnection(*nodeIn, portIndexIn, *nodeOut, portIndexOut);
+  auto getConverter = [&]()
+  {
+    QJsonValue converterVal = connectionJson["converter"];
+
+    if (!converterVal.isUndefined())
+    {
+      QJsonObject converterJson = converterVal.toObject();
+
+      NodeDataType inType { converterJson["in"].toObject()["id"].toString(),
+                            converterJson["in"].toObject()["name"].toString() };
+
+      NodeDataType outType { converterJson["out"].toObject()["id"].toString(),
+                             converterJson["out"].toObject()["name"].toString() };
+
+      auto converter  =
+        registry().getTypeConverter(outType, inType);
+
+      if (converter)
+        return converter;
+    }
+
+    return TypeConverter{};
+  };
+
+  std::shared_ptr<Connection> connection =
+    createConnection(*nodeIn, portIndexIn,
+                     *nodeOut, portIndexOut,
+                     getConverter());
+
+  // Note: the connectionCreated(...) signal has already been sent
+  // by createConnection(...)
+
+  return connection;
 }
 
 
@@ -128,9 +184,12 @@ void
 FlowScene::
 deleteConnection(Connection& connection)
 {
-  connectionDeleted(connection);
-  connection.removeFromNodes();
-  _connections.erase(connection.id());
+  auto it = _connections.find(connection.id());
+  if (it != _connections.end())
+  {
+    connection.removeFromNodes();
+    _connections.erase(it);
+  }
 }
 
 
@@ -138,8 +197,8 @@ Node&
 FlowScene::
 createNode(std::unique_ptr<NodeDataModel> && dataModel)
 {
-  auto node = std::make_unique<Node>(std::move(dataModel));
-  auto ngo  = std::make_unique<NodeGraphicsObject>(*this, *node);
+  auto node = detail::make_unique<Node>(std::move(dataModel));
+  auto ngo  = detail::make_unique<NodeGraphicsObject>(*this, *node);
 
   node->setGraphicsObject(std::move(ngo));
 
@@ -163,8 +222,8 @@ restoreNode(QJsonObject const& nodeJson)
     throw std::logic_error(std::string("No registered model with name ") +
                            modelName.toLocal8Bit().data());
 
-  auto node = std::make_unique<Node>(std::move(dataModel));
-  auto ngo  = std::make_unique<NodeGraphicsObject>(*this, *node);
+  auto node = detail::make_unique<Node>(std::move(dataModel));
+  auto ngo  = detail::make_unique<NodeGraphicsObject>(*this, *node);
   node->setGraphicsObject(std::move(ngo));
 
   node->restore(nodeJson);
@@ -172,6 +231,7 @@ restoreNode(QJsonObject const& nodeJson)
   auto nodePtr = node.get();
   _nodes[node->id()] = std::move(node);
 
+  nodePlaced(*nodePtr);
   nodeCreated(*nodePtr);
   return *nodePtr;
 }
@@ -184,21 +244,17 @@ removeNode(Node& node)
   // call signal
   nodeDeleted(node);
 
-  auto deleteConnections =
-    [&node, this] (PortType portType)
+  for(auto portType: {PortType::In,PortType::Out})
+  {
+    auto nodeState = node.nodeState();
+    auto const & nodeEntries = nodeState.getEntries(portType);
+
+    for (auto &connections : nodeEntries)
     {
-      auto nodeState = node.nodeState();
-      auto const & nodeEntries = nodeState.getEntries(portType);
-
-      for (auto &connections : nodeEntries)
-      {
-        for (auto const &pair : connections)
-          deleteConnection(*pair.second);
-      }
-    };
-
-  deleteConnections(PortType::In);
-  deleteConnections(PortType::Out);
+      for (auto const &pair : connections)
+        deleteConnection(*pair.second);
+    }
+  }
 
   _nodes.erase(node.id());
 }
@@ -216,13 +272,13 @@ void
 FlowScene::
 setRegistry(std::shared_ptr<DataModelRegistry> registry)
 {
-  _registry = registry;
+  _registry = std::move(registry);
 }
 
 
 void
 FlowScene::
-iterateOverNodes(std::function<void(Node*)> visitor)
+iterateOverNodes(std::function<void(Node*)> const & visitor)
 {
   for (const auto& _node : _nodes)
   {
@@ -233,7 +289,7 @@ iterateOverNodes(std::function<void(Node*)> visitor)
 
 void
 FlowScene::
-iterateOverNodeData(std::function<void(NodeDataModel*)> visitor)
+iterateOverNodeData(std::function<void(NodeDataModel*)> const & visitor)
 {
   for (const auto& _node : _nodes)
   {
@@ -244,7 +300,7 @@ iterateOverNodeData(std::function<void(NodeDataModel*)> visitor)
 
 void
 FlowScene::
-iterateOverNodeDataDependentOrder(std::function<void(NodeDataModel*)> visitor)
+iterateOverNodeDataDependentOrder(std::function<void(NodeDataModel*)> const & visitor)
 {
   std::set<QUuid> visitedNodesSet;
 
@@ -252,7 +308,7 @@ iterateOverNodeDataDependentOrder(std::function<void(NodeDataModel*)> visitor)
   auto isNodeLeaf =
     [](Node const &node, NodeDataModel const &model)
     {
-      for (size_t i = 0; i < model.nPorts(PortType::In); ++i)
+      for (unsigned int i = 0; i < model.nPorts(PortType::In); ++i)
       {
         auto connections = node.nodeState().connections(PortType::In, i);
         if (!connections.empty())
@@ -360,6 +416,21 @@ connections() const
 
 std::vector<Node*>
 FlowScene::
+allNodes() const
+{
+  std::vector<Node*> nodes;
+
+  std::transform(_nodes.begin(),
+                 _nodes.end(),
+                 std::back_inserter(nodes),
+                 [](std::pair<QUuid const, std::unique_ptr<Node>> const & p) { return p.second.get(); });
+
+  return nodes;
+}
+
+
+std::vector<Node*>
+FlowScene::
 selectedNodes() const
 {
   QList<QGraphicsItem*> graphicsItems = selectedItems();
@@ -390,15 +461,14 @@ clearScene()
   //Manual node cleanup. Simply clearing the holding datastructures doesn't work, the code crashes when
   // there are both nodes and connections in the scene. (The data propagation internal logic tries to propagate
   // data through already freed connections.)
-  std::vector<Node*> nodesToDelete;
-  for (auto& node : _nodes)
+  while (_connections.size() > 0)
   {
-    nodesToDelete.push_back(node.second.get());
+    deleteConnection( *_connections.begin()->second );
   }
 
-  for (auto& node : nodesToDelete)
+  while (_nodes.size() > 0)
   {
-    removeNode(*node);
+    removeNode( *_nodes.begin()->second );
   }
 }
 
@@ -431,10 +501,6 @@ void
 FlowScene::
 load()
 {
-  clearScene();
-
-  //-------------
-
   QString fileName =
     QFileDialog::getOpenFileName(nullptr,
                                  tr("Open Flow Scene"),
@@ -448,6 +514,8 @@ load()
 
   if (!file.open(QIODevice::ReadOnly))
     return;
+
+  clearScene();
 
   QByteArray wholeFile = file.readAll();
 
@@ -499,17 +567,59 @@ loadFromMemory(const QByteArray& data)
 
   QJsonArray nodesJsonArray = jsonDocument["nodes"].toArray();
 
-  for (int i = 0; i < nodesJsonArray.size(); ++i)
+  for (QJsonValueRef node : nodesJsonArray)
   {
-    restoreNode(nodesJsonArray[i].toObject());
+    restoreNode(node.toObject());
   }
 
   QJsonArray connectionJsonArray = jsonDocument["connections"].toArray();
 
-  for (int i = 0; i < connectionJsonArray.size(); ++i)
+  for (QJsonValueRef connection : connectionJsonArray)
   {
-    restoreConnection(connectionJsonArray[i].toObject());
+    restoreConnection(connection.toObject());
   }
+}
+
+
+void
+FlowScene::
+setupConnectionSignals(Connection const& c)
+{
+  connect(&c,
+          &Connection::connectionMadeIncomplete,
+          this,
+          &FlowScene::connectionDeleted,
+          Qt::UniqueConnection);
+}
+
+
+void
+FlowScene::
+sendConnectionCreatedToNodes(Connection const& c)
+{
+  Node* from = c.getNode(PortType::Out);
+  Node* to   = c.getNode(PortType::In);
+
+  Q_ASSERT(from != nullptr);
+  Q_ASSERT(to != nullptr);
+
+  from->nodeDataModel()->outputConnectionCreated(c);
+  to->nodeDataModel()->inputConnectionCreated(c);
+}
+
+
+void
+FlowScene::
+sendConnectionDeletedToNodes(Connection const& c)
+{
+  Node* from = c.getNode(PortType::Out);
+  Node* to   = c.getNode(PortType::In);
+
+  Q_ASSERT(from != nullptr);
+  Q_ASSERT(to != nullptr);
+
+  from->nodeDataModel()->outputConnectionDeleted(c);
+  to->nodeDataModel()->inputConnectionDeleted(c);
 }
 
 
@@ -519,7 +629,7 @@ namespace QtNodes
 
 Node*
 locateNodeAt(QPointF scenePoint, FlowScene &scene,
-             QTransform viewTransform)
+             QTransform const & viewTransform)
 {
   // items under cursor
   QList<QGraphicsItem*> items =

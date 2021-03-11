@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory>
 
 #include <QtWidgets/QWidget>
 
@@ -11,6 +10,7 @@
 #include "NodeStyle.hpp"
 #include "NodePainterDelegate.hpp"
 #include "Export.hpp"
+#include "memory.hpp"
 
 namespace QtNodes
 {
@@ -21,6 +21,8 @@ enum class NodeValidationState
   Warning,
   Error
 };
+
+class Connection;
 
 class StyleCollection;
 
@@ -56,10 +58,6 @@ public:
   /// Name makes this model unique
   virtual QString
   name() const = 0;
-
-  /// Function creates instances of a model stored in DataModelRegistry
-  virtual std::unique_ptr<NodeDataModel>
-  clone() const = 0;
 
 public:
 
@@ -126,7 +124,29 @@ public:
   virtual
   NodePainterDelegate* painterDelegate() const { return nullptr; }
 
-signals:
+public Q_SLOTS:
+
+  virtual void
+  inputConnectionCreated(Connection const&)
+  {
+  }
+
+  virtual void
+  inputConnectionDeleted(Connection const&)
+  {
+  }
+
+  virtual void
+  outputConnectionCreated(Connection const&)
+  {
+  }
+
+  virtual void
+  outputConnectionDeleted(Connection const&)
+  {
+  }
+
+Q_SIGNALS:
 
   void
   dataUpdated(PortIndex index);
@@ -139,6 +159,8 @@ signals:
 
   void
   computingFinished();
+
+  void embeddedWidgetSizeUpdated();
 
 private:
 

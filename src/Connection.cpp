@@ -1,7 +1,7 @@
 #include "Connection.hpp"
 
-#include <iostream>
-#include <math.h>
+#include <cmath>
+#include <utility>
 
 #include <QtWidgets/QtWidgets>
 #include <QtGlobal>
@@ -27,12 +27,13 @@ using QtNodes::NodeData;
 using QtNodes::NodeDataType;
 using QtNodes::ConnectionGraphicsObject;
 using QtNodes::ConnectionGeometry;
+using QtNodes::TypeConverter;
 
 Connection::
 Connection(PortType portType,
            Node& node,
            PortIndex portIndex)
-  : _id(QUuid::createUuid())
+  : _uid(QUuid::createUuid())
   , _outPortIndex(INVALID)
   , _inPortIndex(INVALID)
   , _connectionState()
@@ -47,13 +48,15 @@ Connection::
 Connection(Node& nodeIn,
            PortIndex portIndexIn,
            Node& nodeOut,
-           PortIndex portIndexOut)
-  : _id(QUuid::createUuid())
+           PortIndex portIndexOut,
+           TypeConverter typeConverter)
+  : _uid(QUuid::createUuid())
   , _outNode(&nodeOut)
   , _inNode(&nodeIn)
   , _outPortIndex(portIndexOut)
   , _inPortIndex(portIndexIn)
   , _connectionState()
+  , _converter(std::move(typeConverter))
 {
   setNodeToPort(nodeIn, PortType::In, portIndexIn);
   setNodeToPort(nodeOut, PortType::Out, portIndexOut);
@@ -63,6 +66,11 @@ Connection(Node& nodeIn,
 Connection::
 ~Connection()
 {
+  if (complete())
+  {
+    connectionMadeIncomplete(*this);
+  }
+
   propagateCutData();
 
   if (_inNode)
@@ -90,6 +98,26 @@ save() const
 
     connectionJson["out_id"] = _outNode->id().toString();
     connectionJson["out_index"] = _outPortIndex;
+
+    if (_converter)
+    {
+      auto getTypeJson = [this](PortType type)
+      {
+        QJsonObject typeJson;
+        NodeDataType nodeType = this->dataType(type);
+        typeJson["id"] = nodeType.id;
+        typeJson["name"] = nodeType.name;
+
+        return typeJson;
+      };
+
+      QJsonObject converterTypeJson;
+
+      converterTypeJson["in"] = getTypeJson(PortType::In);
+      converterTypeJson["out"] = getTypeJson(PortType::Out);
+
+      connectionJson["converter"] = converterTypeJson;
+    }
   }
 
   return connectionJson;
@@ -100,7 +128,15 @@ QUuid
 Connection::
 id() const
 {
-  return _id;
+  return _uid;
+}
+
+
+bool
+Connection::
+complete() const
+{
+  return _inNode != nullptr && _outNode != nullptr;
 }
 
 
@@ -172,6 +208,7 @@ setGraphicsObject(std::unique_ptr<ConnectionGraphicsObject>&& graphics)
 }
 
 
+
 PortIndex
 Connection::
 getPortIndex(PortType portType) const
@@ -203,6 +240,8 @@ setNodeToPort(Node& node,
               PortType portType,
               PortIndex portIndex)
 {
+  bool wasIncomplete = !complete();
+
   auto& nodeWeak = getNode(portType);
 
   nodeWeak = &node;
@@ -215,6 +254,9 @@ setNodeToPort(Node& node,
   _connectionState.setNoRequiredPort();
 
   updated(*this);
+  if (complete() && wasIncomplete) {
+    connectionCompleted(*this);
+  }
 }
 
 
@@ -318,6 +360,11 @@ void
 Connection::
 clearNode(PortType portType)
 {
+  if (complete())
+  {
+    connectionMadeIncomplete(*this);
+  }
+
   getNode(portType) = nullptr;
 
   if (portType == PortType::In)
@@ -329,31 +376,52 @@ clearNode(PortType portType)
 
 NodeDataType
 Connection::
-dataType() const
+dataType(PortType portType) const
 {
-  Node* validNode;
-  PortIndex index    = INVALID;
-  PortType  portType = PortType::None;
-
-  if ((validNode = _inNode))
+  if (_inNode && _outNode)
   {
-    index    = _inPortIndex;
-    portType = PortType::In;
-  }
-  else if ((validNode = _outNode))
-  {
-    index    = _outPortIndex;
-    portType = PortType::Out;
-  }
-
-  if (validNode)
-  {
-    auto const &model = validNode->nodeDataModel();
+    auto const & model = (portType == PortType::In) ?
+                        _inNode->nodeDataModel() :
+                        _outNode->nodeDataModel();
+    PortIndex index = (portType == PortType::In) ? 
+                      _inPortIndex :
+                      _outPortIndex;
 
     return model->dataType(portType, index);
   }
+  else 
+  {
+    Node* validNode;
+    PortIndex index = INVALID;
+
+    if ((validNode = _inNode))
+    {
+      index    = _inPortIndex;
+      portType = PortType::In;
+    }
+    else if ((validNode = _outNode))
+    {
+      index    = _outPortIndex;
+      portType = PortType::Out;
+    }
+
+    if (validNode)
+    {
+      auto const &model = validNode->nodeDataModel();
+
+      return model->dataType(portType, index);
+    }
+  }
 
   Q_UNREACHABLE();
+}
+
+
+void
+Connection::
+setTypeConverter(TypeConverter converter)
+{
+  _converter = std::move(converter);
 }
 
 
@@ -363,6 +431,11 @@ propagateData(std::shared_ptr<NodeData> nodeData, bool connectionCut) const
 {
   if (_inNode)
   {
+    if (_converter)
+    {
+      nodeData = _converter(nodeData);
+    }
+
     _inNode->propagateData(nodeData, _inPortIndex, connectionCut);
   }
 }
