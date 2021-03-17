@@ -18,6 +18,7 @@ namespace QtNodes
   public:
 
     static void setNodeStyle(QString jsonText);
+	static void setNodeStyleCaptionMaxWidth(float max);
 
   private:
 

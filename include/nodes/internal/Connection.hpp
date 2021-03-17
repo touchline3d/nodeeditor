@@ -129,6 +129,9 @@ public: // data propagation
   void
   propagateEmptyData();
 
+  void
+  propagateCutData();
+
 Q_SIGNALS:
 
   void

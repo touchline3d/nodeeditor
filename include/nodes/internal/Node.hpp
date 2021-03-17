@@ -95,7 +95,10 @@ public Q_SLOTS: // data propagation
   /// Fetches data from model's OUT #index port
   /// and propagates it to the connection
   void
-  onDataUpdated(PortIndex index, bool connectionCut = false);
+  onDataUpdated(PortIndex index);
+
+  void
+  onDataUpdatedConnection(PortIndex index, Connection* connection, bool connectionCut = false);
 
   /// update the graphic part if the size of the embeddedwidget changes
   void
